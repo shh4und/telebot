@@ -1,0 +1,6 @@
+.env
+build/
+*.log
+.DS_Store
+.vscode/
+*.swp
