@@ -5,6 +5,8 @@ var AvailableModels = map[string]bool{
 	"gemma3:4b":   true,
 }
 
+const DefaultModel = "gemma3n:e4b"
+
 // Estruturas baseadas na API do Ollama
 type OllamaRequest struct {
 	Model  string `json:"model"`

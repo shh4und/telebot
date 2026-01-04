@@ -3,6 +3,7 @@ package bot
 import (
 	"fmt"
 	"strings"
+	"telegram-bot/internal/ai"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 )
@@ -17,23 +18,33 @@ func Dispatch(b *gotgbot.Bot, upd gotgbot.Update) {
 	msg := upd.Message
 	text := msg.Text
 
-	// Rota: /ping <palavra>
-	if strings.HasPrefix(text, "/ping") {
-		handlePing(b, msg)
+	args := strings.Fields(text)
+	if len(args) == 0 {
+		return
 	}
+
+	cmd := args[0]
+
+	switch {
+	case strings.HasPrefix(cmd, "/ping"):
+		handlePing(b, msg, args)
+	case strings.HasPrefix(cmd, "/ajuda"):
+		handleAjuda(b, msg)
+	case strings.HasPrefix(cmd, "/mimdiga"):
+		handleMimDiga(b, msg, args)
+	default:
+		return
+	}
+
 }
 
-func handlePing(b *gotgbot.Bot, msg *gotgbot.Message) {
+func handlePing(b *gotgbot.Bot, msg *gotgbot.Message, args []string) {
 	// Dividir a string por espaços (Fields remove espaços extras automaticamente)
-	args := strings.Fields(msg.Text)
 
 	palavra := ""
 	if len(args) > 1 {
 		palavra = args[1]
-	} else {
-		palavra = "(sem palavra)"
 	}
-
 	// Menção ao usuário (Username ou Firstname se não houver username)
 	userName := msg.From.FirstName
 	if msg.From.Username != "" {
@@ -43,8 +54,44 @@ func handlePing(b *gotgbot.Bot, msg *gotgbot.Message) {
 	resposta := fmt.Sprintf("pong %s %s to funcionando!", userName, palavra)
 
 	// Enviar a resposta
-	_, err := b.SendMessage(msg.Chat.Id, resposta, nil)
-	if err != nil {
-		fmt.Printf("Erro ao enviar mensagem: %v\n", err)
+	b.SendMessage(msg.Chat.Id, resposta, nil)
+	// if err != nil {
+	// 	fmt.Printf("Erro ao enviar mensagem: %v\n", err)
+	// }
+}
+
+func handleAjuda(b *gotgbot.Bot, msg *gotgbot.Message) {
+
+	resposta := "Tem ajuda aqui não, pae"
+
+	// Enviar a resposta
+	b.SendMessage(msg.Chat.Id, resposta, nil)
+
+}
+
+func handleMimDiga(b *gotgbot.Bot, msg *gotgbot.Message, args []string) {
+	query := ""
+	if len(args) > 1 {
+		query = strings.Join(args[1:], " ")
+	} else {
+		return
 	}
+	// Menção ao usuário (Username ou Firstname se não houver username)
+	userName := msg.From.FirstName
+	if msg.From.Username != "" {
+		userName = "@" + msg.From.Username
+	}
+
+	aiResponse, err := ai.AskOllama("", query)
+	if err != nil {
+		fmt.Printf("error at handling AI request: %v", err)
+		return
+	}
+
+	res := fmt.Sprintf("Respondeno a @%s,\n%s", userName, aiResponse)
+	// Enviar a res
+	b.SendMessage(msg.Chat.Id, res, nil)
+	// if err != nil {
+	// 	fmt.Printf("Erro ao enviar mensagem: %v\n", err)
+	// }
 }

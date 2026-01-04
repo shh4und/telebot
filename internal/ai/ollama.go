@@ -7,13 +7,16 @@ import (
 	"net/http"
 )
 
-func askOllama(model string, prompt string) (string, error) {
+func AskOllama(model string, prompt string) (string, error) {
 	url := "http://127.0.0.1:11434/api/generate"
+
+	if model == "" {
+		model = DefaultModel
+	}
 
 	if !(AvailableModels[model]) {
 		return "", fmt.Errorf("Model %s not available", model)
 	}
-
 	payload := OllamaRequest{
 		Model:  model,
 		Prompt: prompt,
