@@ -2,6 +2,7 @@ package bot
 
 import (
 	"fmt"
+	"log"
 	"strings"
 	"telegram-bot/internal/ai"
 
@@ -31,6 +32,7 @@ func Dispatch(b *gotgbot.Bot, upd gotgbot.Update) {
 	case strings.HasPrefix(cmd, "/ajuda"):
 		handleAjuda(b, msg)
 	case strings.HasPrefix(cmd, "/mimdiga"):
+		log.Println("/mimdiga")
 		handleMimDiga(b, msg, args)
 	default:
 		return
