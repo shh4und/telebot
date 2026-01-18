@@ -21,7 +21,6 @@ func AskOllama(model string, prompt string) (string, error) {
 		Model:  model,
 		Prompt: prompt,
 		Stream: false,
-		System: "Always answer in English.",
 	}
 
 	jsonData, _ := json.Marshal(payload)
