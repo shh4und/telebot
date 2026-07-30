@@ -28,7 +28,7 @@ func Dispatch(b *gotgbot.Bot, upd gotgbot.Update) {
 
 	switch {
 	case strings.HasPrefix(cmd, "/ping"):
-		handlePing(b, msg, args)
+		handlePing(b, msg)
 	case strings.HasPrefix(cmd, "/ajuda"):
 		handleAjuda(b, msg)
 	case strings.HasPrefix(cmd, "/mimdiga"):
@@ -40,34 +40,31 @@ func Dispatch(b *gotgbot.Bot, upd gotgbot.Update) {
 
 }
 
-func handlePing(b *gotgbot.Bot, msg *gotgbot.Message, args []string) {
-	// Dividir a string por espaços (Fields remove espaços extras automaticamente)
+func handlePing(b *gotgbot.Bot, msg *gotgbot.Message) {
 
-	palavra := ""
-	if len(args) > 1 {
-		palavra = args[1]
-	}
-	// Menção ao usuário (Username ou Firstname se não houver username)
-	userName := msg.From.FirstName
-	if msg.From.Username != "" {
-		userName = "@" + msg.From.Username
+	resposta := "pong! to funcionando!"
+
+	//  opções de envio definindo o ID da mensagem que será respondida
+	opts := &gotgbot.SendMessageOpts{
+		ReplyParameters: &gotgbot.ReplyParameters{
+			MessageId: msg.MessageId, // O ID da mensagem do usuário que enviou o comando
+		},
 	}
 
-	resposta := fmt.Sprintf("pong %s %s to funcionando!", userName, palavra)
-
-	// Enviar a resposta
-	b.SendMessage(msg.Chat.Id, resposta, nil)
-	// if err != nil {
-	// 	fmt.Printf("Erro ao enviar mensagem: %v\n", err)
-	// }
+	b.SendMessage(msg.Chat.Id, resposta, opts)
 }
 
 func handleAjuda(b *gotgbot.Bot, msg *gotgbot.Message) {
 
 	resposta := "Tem ajuda aqui não, pae"
 
+	opts := &gotgbot.SendMessageOpts{
+		ReplyParameters: &gotgbot.ReplyParameters{
+			MessageId: msg.MessageId, // O ID da mensagem do usuário que enviou o comando
+		},
+	}
 	// Enviar a resposta
-	b.SendMessage(msg.Chat.Id, resposta, nil)
+	b.SendMessage(msg.Chat.Id, resposta, opts)
 
 }
 
@@ -78,11 +75,11 @@ func handleMimDiga(b *gotgbot.Bot, msg *gotgbot.Message, args []string) {
 	} else {
 		return
 	}
-	// Menção ao usuário (Username ou Firstname se não houver username)
-	userName := msg.From.FirstName
-	if msg.From.Username != "" {
-		userName = "@" + msg.From.Username
-	}
+	// // Menção ao usuário (Username ou Firstname se não houver username)
+	// userName := msg.From.FirstName
+	// if msg.From.Username != "" {
+	// 	userName = "@" + msg.From.Username
+	// }
 
 	aiResponse, err := ai.AskOllama("", query)
 	if err != nil {
@@ -90,10 +87,12 @@ func handleMimDiga(b *gotgbot.Bot, msg *gotgbot.Message, args []string) {
 		return
 	}
 
-	res := fmt.Sprintf("Respondeno a @%s,\n%s", userName, aiResponse)
+	opts := &gotgbot.SendMessageOpts{
+		ReplyParameters: &gotgbot.ReplyParameters{
+			MessageId: msg.MessageId, // O ID da mensagem do usuário que enviou o comando
+		},
+	}
 	// Enviar a res
-	b.SendMessage(msg.Chat.Id, res, nil)
-	// if err != nil {
-	// 	fmt.Printf("Erro ao enviar mensagem: %v\n", err)
-	// }
+	b.SendMessage(msg.Chat.Id, aiResponse, opts)
+
 }
