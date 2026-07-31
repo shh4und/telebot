@@ -21,6 +21,10 @@ func SetBotCommands(b *gotgbot.Bot) error {
 			Command:     "fig",
 			Description: "Converte uma imagem enviada ou respondida em sticker",
 		},
+		{
+			Command:     "addfig",
+			Description: "Adiciona uma figurinha ao pacote",
+		},
 	}
 
 	// 1. Aplica para o escopo Default (fallback geral)

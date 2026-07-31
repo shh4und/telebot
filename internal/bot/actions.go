@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 
 	"telegram-bot/internal/stickers"
@@ -11,7 +12,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 )
 
-func handlePhotoToSticker(b *gotgbot.Bot, msg *gotgbot.Message, photos []gotgbot.PhotoSize) {
+func handlePhotoToSticker(b *gotgbot.Bot, msg *gotgbot.Message, photos []gotgbot.PhotoSize, addToPack bool) {
 	if len(photos) == 0 {
 		return
 	}
@@ -21,6 +22,7 @@ func handlePhotoToSticker(b *gotgbot.Bot, msg *gotgbot.Message, photos []gotgbot
 
 	file, err := b.GetFile(photo.FileId, nil)
 	if err != nil {
+		slog.Error("b.GetFile", "error", err, "photo", photo.FileId)
 		replyError(b, msg, "Erro ao obter dados da imagem no servidor do Telegram.")
 		return
 	}
@@ -28,6 +30,7 @@ func handlePhotoToSticker(b *gotgbot.Bot, msg *gotgbot.Message, photos []gotgbot
 	fileURL := file.URL(b, nil)
 	resp, err := http.Get(fileURL)
 	if err != nil {
+		slog.Error("http.Get", "error", err, "fileURL", fileURL)
 		replyError(b, msg, "Erro ao realizar o download da imagem.")
 		return
 	}
@@ -35,26 +38,71 @@ func handlePhotoToSticker(b *gotgbot.Bot, msg *gotgbot.Message, photos []gotgbot
 
 	imgBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
+		slog.Error("io.ReadAll", "error", err, "imgBytes", len(imgBytes))
 		replyError(b, msg, "Erro ao ler buffer da imagem.")
 		return
 	}
 
 	webpData, err := stickers.ProcessImageToWebp(imgBytes)
 	if err != nil {
+		slog.Error("stickers.ProcessImageToWebp", "error", err, "imgBytes", len(imgBytes))
 		replyError(b, msg, "Erro ao converter imagem para sticker WEBP.")
 		return
 	}
+	if addToPack {
 
-	stickerFile := gotgbot.InputFileByReader("sticker.webp", bytes.NewReader(webpData))
+		setName, err := stickers.AddToCentralPack(b, webpData)
+		if err != nil {
+			slog.Error("stickers.AddToCentralPack", "error", err, "webpData", len(webpData))
+			replyError(b, msg, fmt.Sprintf("Erro ao atualizar pacote de figurinhas: %v", err))
+			return
+		}
+
+		packURL := fmt.Sprintf("https://t.me/addstickers/%s", setName)
+		resposta := fmt.Sprintf("Figurinha adicionada ao pacote!\nAcesse seu pacote aqui: %s", packURL)
+
+		opts := &gotgbot.SendMessageOpts{
+			ReplyParameters: &gotgbot.ReplyParameters{
+				MessageId: msg.MessageId,
+			},
+		}
+		b.SendMessage(msg.Chat.Id, resposta, opts)
+	} else {
+		stickerFile := gotgbot.InputFileByReader("sticker.webp", bytes.NewReader(webpData))
+		opts := &gotgbot.SendStickerOpts{
+			ReplyParameters: &gotgbot.ReplyParameters{
+				MessageId: msg.MessageId,
+			},
+		}
+
+		_, err = b.SendSticker(msg.Chat.Id, stickerFile, opts)
+		if err != nil {
+			slog.Error("b.SendSticker", "error", err, "stickerFile", stickerFile)
+			fmt.Printf("Erro ao enviar sticker: %v\n", err)
+		}
+	}
+
+}
+
+func handleGifToSticker(b *gotgbot.Bot, msg *gotgbot.Message, gifBytes []byte) {
+	// 1. Processa o GIF/Vídeo via FFmpeg
+	webmData, err := stickers.ProcessGifToWebm(gifBytes)
+	if err != nil {
+		replyError(b, msg, "Erro ao processar GIF/Vídeo para sticker.")
+		return
+	}
+
+	// 2. Envia especificando o nome do arquivo com extensão .webm
+	stickerFile := gotgbot.InputFileByReader("sticker.webm", bytes.NewReader(webmData))
 	opts := &gotgbot.SendStickerOpts{
 		ReplyParameters: &gotgbot.ReplyParameters{
-			MessageId: msg.MessageId, // Responde à mensagem do comando
+			MessageId: msg.MessageId,
 		},
 	}
 
 	_, err = b.SendSticker(msg.Chat.Id, stickerFile, opts)
 	if err != nil {
-		fmt.Printf("Erro ao enviar sticker: %v\n", err)
+		fmt.Printf("Erro ao enviar sticker de vídeo: %v\n", err)
 	}
 }
 

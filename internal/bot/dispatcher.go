@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"log/slog"
 	"strings"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -16,7 +17,10 @@ func Dispatch(b *gotgbot.Bot, upd gotgbot.Update) {
 	// 1. Processamento quando o comando está na legenda (Caption) de uma foto enviada diretamente
 	if len(msg.Photo) > 0 && msg.Caption != "" {
 		if isCommand(msg.Caption, "/fig") || isCommand(msg.Caption, "/sticker") {
-			handlePhotoToSticker(b, msg, msg.Photo)
+			handlePhotoToSticker(b, msg, msg.Photo, false)
+			return
+		}else if isCommand(msg.Caption, "/addfig") || isCommand(msg.Caption, "/addsticker") {
+			handlePhotoToSticker(b, msg, msg.Photo, false)
 			return
 		}
 	}
@@ -43,9 +47,13 @@ func Dispatch(b *gotgbot.Bot, upd gotgbot.Update) {
 	case isCommand(cmd, "/fig") || isCommand(cmd, "/sticker"):
 		// Caso 2: Comando /fig enviado como RESPOSTA a uma foto
 		if msg.ReplyToMessage != nil && len(msg.ReplyToMessage.Photo) > 0 {
-			handlePhotoToSticker(b, msg, msg.ReplyToMessage.Photo)
+			handlePhotoToSticker(b, msg, msg.ReplyToMessage.Photo, false)
 		}
-
+	case isCommand(cmd, "/addfig") || isCommand(cmd, "/addsticker"):
+		// Caso 3: Comando /addfig enviado como RESPOSTA a uma foto
+		if msg.ReplyToMessage != nil && len(msg.ReplyToMessage.Photo) > 0 {
+			handlePhotoToSticker(b, msg, msg.ReplyToMessage.Photo, true)
+		}
 	default:
 		return
 	}
@@ -68,6 +76,7 @@ func handlePing(b *gotgbot.Bot, msg *gotgbot.Message) {
 			MessageId: msg.MessageId,
 		},
 	}
+	slog.Info("ping", "message_id", msg.MessageId)
 	b.SendMessage(msg.Chat.Id, resposta, opts)
 }
 
@@ -78,6 +87,7 @@ func handleAjuda(b *gotgbot.Bot, msg *gotgbot.Message) {
 			MessageId: msg.MessageId,
 		},
 	}
+	slog.Info("ajuda", "message_id", msg.MessageId)
 	b.SendMessage(msg.Chat.Id, resposta, opts)
 }
 
