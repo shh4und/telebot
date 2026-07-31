@@ -32,6 +32,11 @@ func main() {
 	if err != nil {
 		panic("failed to create new bot: " + err.Error())
 	}
+
+	if err := bot.SetBotCommands(b); err != nil {
+		panic("failed to set bot commands: " + err.Error())
+	}
+
 	fmt.Printf("Bot online: @%s\n", b.User.Username)
 	// Create updater and dispatcher.
 	var offset int64
