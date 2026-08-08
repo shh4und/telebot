@@ -13,18 +13,26 @@ func Dispatch(b *gotgbot.Bot, upd gotgbot.Update) {
 	}
 
 	msg := upd.Message
-
 	// 1. Processamento quando o comando está na legenda (Caption) de uma foto enviada diretamente
-	if len(msg.Photo) > 0 && msg.Caption != "" {
+	if msg.ReplyToMessage == nil && len(msg.Photo) > 0 && msg.Caption != "" {
 		if isCommand(msg.Caption, "/fig") || isCommand(msg.Caption, "/sticker") {
 			handlePhotoToSticker(b, msg, msg.Photo, false)
 			return
-		}else if isCommand(msg.Caption, "/addfig") || isCommand(msg.Caption, "/addsticker") {
-			handlePhotoToSticker(b, msg, msg.Photo, false)
+		} else if isCommand(msg.Caption, "/addfig") || isCommand(msg.Caption, "/addsticker") {
+			handlePhotoToSticker(b, msg, msg.Photo, true)
 			return
 		}
 	}
+	if msg != nil && msg.Animation != nil && msg.Animation.FileSize > 0 && msg.Caption != "" {
+		if isCommand(msg.Caption, "/gif") {
+			handleGifToSticker(b, msg, msg.Animation, false)
+			return
 
+		} else if isCommand(msg.Caption, "/addgif") {
+			handleGifToSticker(b, msg, msg.Animation, true)
+			return
+		}
+	}
 	// 2. Processamento de comandos de texto
 	if msg.Text == "" {
 		return
@@ -53,6 +61,17 @@ func Dispatch(b *gotgbot.Bot, upd gotgbot.Update) {
 		// Caso 3: Comando /addfig enviado como RESPOSTA a uma foto
 		if msg.ReplyToMessage != nil && len(msg.ReplyToMessage.Photo) > 0 {
 			handlePhotoToSticker(b, msg, msg.ReplyToMessage.Photo, true)
+		}
+
+	case isCommand(cmd, "/gif"):
+		// Caso 3: Comando /addfig enviado como RESPOSTA a uma foto
+		if msg.ReplyToMessage != nil && msg.ReplyToMessage.Animation != nil && msg.ReplyToMessage.Animation.FileSize > 0 {
+			handleGifToSticker(b, msg, msg.ReplyToMessage.Animation, false)
+		}
+	case isCommand(cmd, "/addgif"):
+		// Caso 4: Comando /addgif enviado como RESPOSTA a uma gif
+		if msg.ReplyToMessage != nil && msg.ReplyToMessage.Animation != nil && msg.ReplyToMessage.Animation.FileSize > 0 {
+			handleGifToSticker(b, msg, msg.ReplyToMessage.Animation, true)
 		}
 	default:
 		return

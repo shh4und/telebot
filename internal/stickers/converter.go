@@ -62,7 +62,8 @@ func ProcessGifToWebm(inputData []byte) ([]byte, error) {
 
 	// Comando FFmpeg com as restrições estritas do Telegram:
 	// - t 3: limita a 3 segundos
-	// - vf: redimensiona mantendo proporção até 512px e força fps em 30
+	// - vf: recorta um quadrado central e redimensiona para 512x512
+	//   (figurinhas de vídeo do Telegram exigem proporção 1:1) e força fps em 30
 	// - c:v libvpx-vp9: codec VP9
 	// - an: remove áudio
 	// - b:v 256k: limita bitrate para ficar abaixo de 256KB
@@ -70,7 +71,7 @@ func ProcessGifToWebm(inputData []byte) ([]byte, error) {
 		"-y",
 		"-i", inputPath,
 		"-t", "3",
-		"-vf", "scale='if(gt(iw,ih),512,-1)':'if(gt(ih,iw),512,-1)',fps=30",
+		"-vf", "crop='min(iw,ih)':'min(iw,ih)',scale=512:512,fps=30",
 		"-c:v", "libvpx-vp9",
 		"-crf", "30",
 		"-b:v", "256k",
