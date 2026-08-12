@@ -33,6 +33,10 @@ func SetBotCommands(b *gotgbot.Bot) error {
 			Command:     "addgif",
 			Description: "Adiciona um GIF ao pacote",
 		},
+		{
+			Command:     "pergunta",
+			Description: "Faz uma pergunta a IA do bot",
+		},
 	}
 
 	// 1. Aplica para o escopo Default (fallback geral)

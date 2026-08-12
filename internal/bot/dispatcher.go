@@ -1,8 +1,10 @@
 package bot
 
 import (
+	"fmt"
 	"log/slog"
 	"strings"
+	"telegram-bot/internal/ai"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 )
@@ -51,6 +53,9 @@ func Dispatch(b *gotgbot.Bot, upd gotgbot.Update) {
 
 	case isCommand(cmd, "/ajuda"):
 		handleAjuda(b, msg)
+
+	case isCommand(cmd, "/pergunta"):
+		handlePergunta(b, msg, args[1:])
 
 	case isCommand(cmd, "/fig") || isCommand(cmd, "/sticker"):
 		// Caso 2: Comando /fig enviado como RESPOSTA a uma foto
@@ -110,31 +115,32 @@ func handleAjuda(b *gotgbot.Bot, msg *gotgbot.Message) {
 	b.SendMessage(msg.Chat.Id, resposta, opts)
 }
 
-// func handleMimDiga(b *gotgbot.Bot, msg *gotgbot.Message, args []string) {
-// 	query := ""
-// 	if len(args) > 1 {
-// 		query = strings.Join(args[1:], " ")
-// 	} else {
-// 		return
-// 	}
-// 	// // Menção ao usuário (Username ou Firstname se não houver username)
-// 	// userName := msg.From.FirstName
-// 	// if msg.From.Username != "" {
-// 	// 	userName = "@" + msg.From.Username
-// 	// }
+func handlePergunta(b *gotgbot.Bot, msg *gotgbot.Message, args []string) {
+	slog.Info("pergunta", "message_id", msg.MessageId, "args", args)
+	query := ""
+	if len(args) > 1 {
+		query = strings.Join(args[1:], " ")
+	} else {
+		return
+	}
+	// // Menção ao usuário (Username ou Firstname se não houver username)
+	// userName := msg.From.FirstName
+	// if msg.From.Username != "" {
+	// 	userName = "@" + msg.From.Username
+	// }
 
-// 	aiResponse, err := ai.AskOllama("", query)
-// 	if err != nil {
-// 		fmt.Printf("error at handling AI request: %v", err)
-// 		return
-// 	}
+	aiResponse, err := ai.AskOllama("", query)
+	if err != nil {
+		fmt.Printf("error at handling AI request: %v", err)
+		return
+	}
 
-// 	opts := &gotgbot.SendMessageOpts{
-// 		ReplyParameters: &gotgbot.ReplyParameters{
-// 			MessageId: msg.MessageId, // O ID da mensagem do usuário que enviou o comando
-// 		},
-// 	}
-// 	// Enviar a res
-// 	b.SendMessage(msg.Chat.Id, aiResponse, opts)
+	opts := &gotgbot.SendMessageOpts{
+		ReplyParameters: &gotgbot.ReplyParameters{
+			MessageId: msg.MessageId, // O ID da mensagem do usuário que enviou o comando
+		},
+	}
+	// Enviar a res
+	b.SendMessage(msg.Chat.Id, aiResponse, opts)
 
-// }
+}

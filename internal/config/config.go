@@ -11,6 +11,7 @@ import (
 type ConfigEnv struct {
 	BotToken string
 	UserID   int64
+	ApiHost  string
 }
 
 // Envs is a global variable that holds the loaded environment configuration.
@@ -24,5 +25,6 @@ func GetEnvs() ConfigEnv {
 	return ConfigEnv{
 		BotToken: os.Getenv("BOT_TK"),
 		UserID:   userID,
+		ApiHost:  os.Getenv("API_HOST"),
 	}
 }
