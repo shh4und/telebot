@@ -31,7 +31,6 @@ func AskOllama(model string, prompt string) (string, error) {
 				"content": "responda em pt-br",
 			},
 		},
-		Format: "json",
 	}
 
 	jsonData, _ := json.Marshal(payload)

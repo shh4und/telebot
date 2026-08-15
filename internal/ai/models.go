@@ -12,7 +12,6 @@ type OllamaRequest struct {
 	Prompt  string              `json:"prompt"`
 	Stream  bool                `json:"stream"`
 	Message []map[string]string `json:"message,omitempty"`
-	Format  string              `json:"format,omitempty"`
 }
 
 type OllamaResponse struct {

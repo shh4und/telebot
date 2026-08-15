@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strings"
 	"telegram-bot/internal/ai"
+	"telegram-bot/internal/telegraph"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 )
@@ -117,30 +118,55 @@ func handleAjuda(b *gotgbot.Bot, msg *gotgbot.Message) {
 
 func handlePergunta(b *gotgbot.Bot, msg *gotgbot.Message, args []string) {
 	slog.Info("pergunta", "message_id", msg.MessageId, "args", args)
-	query := ""
-	if len(args) > 1 {
-		query = strings.Join(args[1:], " ")
-	} else {
+	if len(args) == 0 {
+		opts := &gotgbot.SendMessageOpts{
+			ReplyParameters: &gotgbot.ReplyParameters{
+				MessageId: msg.MessageId,
+			},
+		}
+		b.SendMessage(msg.Chat.Id, "Por favor, envie uma pergunta após o comando. Exemplo: `/pergunta o que é Go?`", opts)
 		return
 	}
-	// // Menção ao usuário (Username ou Firstname se não houver username)
-	// userName := msg.From.FirstName
-	// if msg.From.Username != "" {
-	// 	userName = "@" + msg.From.Username
-	// }
+
+	query := strings.Join(args, " ")
+	_, _ = b.SendChatAction(msg.Chat.Id, "typing", nil)
 
 	aiResponse, err := ai.AskOllama("", query)
 	if err != nil {
-		fmt.Printf("error at handling AI request: %v", err)
+		slog.Error("error at handling AI request", "error", err)
+		opts := &gotgbot.SendMessageOpts{
+			ReplyParameters: &gotgbot.ReplyParameters{
+				MessageId: msg.MessageId,
+			},
+		}
+		b.SendMessage(msg.Chat.Id, "Desculpe, ocorreu um erro ao consultar a IA.", opts)
 		return
 	}
 
+	title := query
+	if len(title) > 60 {
+		title = title[:57] + "..."
+	}
+
+	pageURL, err := telegraph.PublishMarkdown(title, aiResponse)
+	if err != nil {
+		slog.Error("error publishing to telegraph", "error", err)
+		// Fallback para envio de texto normal caso ocorra erro no Telegraph
+		opts := &gotgbot.SendMessageOpts{
+			ReplyParameters: &gotgbot.ReplyParameters{
+				MessageId: msg.MessageId,
+			},
+		}
+		b.SendMessage(msg.Chat.Id, aiResponse, opts)
+		return
+	}
+
+	respostaMsg := fmt.Sprintf("📄 *Resposta da IA (Instant View):*\n%s", pageURL)
 	opts := &gotgbot.SendMessageOpts{
+		ParseMode: "Markdown",
 		ReplyParameters: &gotgbot.ReplyParameters{
-			MessageId: msg.MessageId, // O ID da mensagem do usuário que enviou o comando
+			MessageId: msg.MessageId,
 		},
 	}
-	// Enviar a res
-	b.SendMessage(msg.Chat.Id, aiResponse, opts)
-
+	b.SendMessage(msg.Chat.Id, respostaMsg, opts)
 }
