@@ -1,0 +1,158 @@
+package bot
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"strings"
+	"telegram-bot/internal/quotes"
+	"time"
+
+	"github.com/PaulSonOfLars/gotgbot/v2"
+)
+
+// buildQuotesKeyboard cria o botão inline para atualizar cotações.
+func buildQuotesKeyboard() gotgbot.InlineKeyboardMarkup {
+	return gotgbot.InlineKeyboardMarkup{
+		InlineKeyboard: [][]gotgbot.InlineKeyboardButton{
+			{
+				{
+					Text:         "🔄 Atualizar Cotações",
+					CallbackData: "refresh_quotes",
+				},
+			},
+		},
+	}
+}
+
+// formatQuotesMessage monta a resposta visual para o Telegram.
+func formatQuotesMessage(summary *quotes.MarketSummary) string {
+	var sb strings.Builder
+
+	sb.WriteString("💵 *COTAÇÃO DE MOEDAS & CRIPTO*\n\n")
+
+	// Câmbio Comercial
+	sb.WriteString("🇧🇷 *Câmbio Comercial (BRL):*\n")
+	if summary.Dollar.Bid > 0 {
+		sb.WriteString(fmt.Sprintf("• *Dólar (USD):* R$ %s (%s)\n",
+			quotes.FormatBRL(summary.Dollar.Bid),
+			quotes.VariationIndicator(summary.Dollar.PctChange),
+		))
+		sb.WriteString(fmt.Sprintf("  ↳ _Mín: R$ %s | Máx: R$ %s_\n",
+			quotes.FormatBRL(summary.Dollar.Low),
+			quotes.FormatBRL(summary.Dollar.High),
+		))
+	} else {
+		sb.WriteString("• *Dólar (USD):* _Indisponível no momento_\n")
+	}
+
+	if summary.Euro.Bid > 0 {
+		sb.WriteString(fmt.Sprintf("• *Euro (EUR):* R$ %s (%s)\n",
+			quotes.FormatBRL(summary.Euro.Bid),
+			quotes.VariationIndicator(summary.Euro.PctChange),
+		))
+		sb.WriteString(fmt.Sprintf("  ↳ _Mín: R$ %s | Máx: R$ %s_\n",
+			quotes.FormatBRL(summary.Euro.Low),
+			quotes.FormatBRL(summary.Euro.High),
+		))
+	} else {
+		sb.WriteString("• *Euro (EUR):* _Indisponível no momento_\n")
+	}
+
+	sb.WriteString("\n🪙 *Criptomoedas (Tempo Real):*\n")
+	if len(summary.Cryptos) == 0 {
+		sb.WriteString("_Cotações de criptomoedas indisponíveis no momento_\n")
+	} else {
+		for _, c := range summary.Cryptos {
+			sb.WriteString(fmt.Sprintf("• *%s (%s):* %s\n",
+				c.Name,
+				c.Symbol,
+				quotes.VariationIndicator(c.Change24h),
+			))
+			sb.WriteString(fmt.Sprintf("  ↳ R$ %s | US$ %s\n",
+				quotes.FormatBRL(c.PriceBRL),
+				quotes.FormatUSD(c.PriceUSD),
+			))
+		}
+	}
+
+	loc, err := time.LoadLocation("America/Sao_Paulo")
+	if err != nil {
+		loc = time.Local
+	}
+	formattedTime := summary.UpdatedAt.In(loc).Format("02/01/2006 15:04:05")
+	sb.WriteString(fmt.Sprintf("\n🕒 _Atualizado em: %s_", formattedTime))
+
+	return sb.String()
+}
+
+// handleMoedas trata os comandos /moedas e /cotacao.
+func handleMoedas(b *gotgbot.Bot, msg *gotgbot.Message) {
+	slog.Info("handleMoedas", "user_id", msg.From.Id)
+
+	_, _ = b.SendChatAction(msg.Chat.Id, "typing", nil)
+
+	ctx := context.Background()
+	summary, err := quotes.GetMarketSummary(ctx, false)
+	if err != nil {
+		slog.Error("erro ao buscar cotações", "error", err)
+		opts := &gotgbot.SendMessageOpts{
+			ReplyParameters: &gotgbot.ReplyParameters{
+				MessageId: msg.MessageId,
+			},
+		}
+		b.SendMessage(msg.Chat.Id, "❌ Não foi possível carregar as cotações no momento. Tente novamente em instantes.", opts)
+		return
+	}
+
+	text := formatQuotesMessage(summary)
+	markup := buildQuotesKeyboard()
+
+	opts := &gotgbot.SendMessageOpts{
+		ParseMode:   "Markdown",
+		ReplyMarkup: markup,
+		ReplyParameters: &gotgbot.ReplyParameters{
+			MessageId: msg.MessageId,
+		},
+	}
+
+	_, err = b.SendMessage(msg.Chat.Id, text, opts)
+	if err != nil {
+		slog.Error("falha ao enviar mensagem de cotações", "error", err)
+	}
+}
+
+// handleQuotesCallback trata o clique no botão "Atualizar Cotações".
+func handleQuotesCallback(b *gotgbot.Bot, cb *gotgbot.CallbackQuery) {
+	slog.Info("quotes refresh clicked", "user_id", cb.From.Id)
+
+	ctx := context.Background()
+	summary, err := quotes.GetMarketSummary(ctx, true) // forçar refresh
+	if err != nil {
+		slog.Error("erro ao atualizar cotações no callback", "error", err)
+		_, _ = b.AnswerCallbackQuery(cb.Id, &gotgbot.AnswerCallbackQueryOpts{
+			Text:      "Erro ao atualizar cotações. Tente novamente.",
+			ShowAlert: false,
+		})
+		return
+	}
+
+	_, _ = b.AnswerCallbackQuery(cb.Id, &gotgbot.AnswerCallbackQueryOpts{
+		Text: "Cotações atualizadas!",
+	})
+
+	if cb.Message != nil {
+		text := formatQuotesMessage(summary)
+		markup := buildQuotesKeyboard()
+
+		_, _, err = b.EditMessageText(text, &gotgbot.EditMessageTextOpts{
+			ChatId:      cb.Message.GetChat().Id,
+			MessageId:   cb.Message.GetMessageId(),
+			ParseMode:   "Markdown",
+			ReplyMarkup: markup,
+		})
+		if err != nil {
+			slog.Debug("falha ao editar mensagem de cotações", "error", err)
+		}
+	}
+}

@@ -41,6 +41,14 @@ func SetBotCommands(b *gotgbot.Bot) error {
 			Command:     "modelo",
 			Description: "Escolhe o modelo de IA para consultas",
 		},
+		{
+			Command:     "noticias",
+			Description: "Exibe as principais notícias e manchetes",
+		},
+		{
+			Command:     "moedas",
+			Description: "Exibe a cotação de moedas e criptomoedas",
+		},
 	}
 
 	// 1. Aplica para o escopo Default (fallback geral)

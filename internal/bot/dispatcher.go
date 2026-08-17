@@ -64,6 +64,12 @@ func Dispatch(b *gotgbot.Bot, upd gotgbot.Update) {
 	case isCommand(cmd, "/modelo") || isCommand(cmd, "/modelos"):
 		handleModelo(b, msg)
 
+	case isCommand(cmd, "/noticias") || isCommand(cmd, "/noticia"):
+		handleNoticias(b, msg, args[1:])
+
+	case isCommand(cmd, "/moedas") || isCommand(cmd, "/moeda") || isCommand(cmd, "/cotacao") || isCommand(cmd, "/cotacoes"):
+		handleMoedas(b, msg)
+
 	case isCommand(cmd, "/pergunta"):
 		handlePergunta(b, msg, args[1:])
 
@@ -208,6 +214,17 @@ func handleCallbackQuery(b *gotgbot.Bot, cb *gotgbot.CallbackQuery) {
 				})
 			}
 		}
+		return
+	}
+
+	if strings.HasPrefix(cb.Data, "news_cat:") {
+		handleNewsCallback(b, cb)
+		return
+	}
+
+	if cb.Data == "refresh_quotes" {
+		handleQuotesCallback(b, cb)
+		return
 	}
 }
 
