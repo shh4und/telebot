@@ -61,9 +61,10 @@ var DefaultCategories = map[string]CategoryInfo{
 		Key:         "eco",
 		Title:       "Economia",
 		Emoji:       "📈",
-		Description: "Mercado e economia (CNN Brasil)",
+		Description: "Mercado e economia (InfoMoney e G1)",
 		FeedURLs: []FeedSource{
-			{Source: "CNN Brasil Economia", URL: "https://www.cnnbrasil.com.br/economia/feed/"},
+			{Source: "InfoMoney", URL: "https://www.infomoney.com.br/feed/"},
+			{Source: "G1 Economia", URL: "https://g1.globo.com/rss/g1/economia/"},
 		},
 	},
 	"tech": {
