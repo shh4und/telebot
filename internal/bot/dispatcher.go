@@ -11,6 +11,12 @@ import (
 )
 
 func Dispatch(b *gotgbot.Bot, upd gotgbot.Update) {
+	// Trata cliques em botões inline (Callback Queries)
+	if upd.CallbackQuery != nil {
+		handleCallbackQuery(b, upd.CallbackQuery)
+		return
+	}
+
 	if upd.Message == nil {
 		return
 	}
@@ -54,6 +60,9 @@ func Dispatch(b *gotgbot.Bot, upd gotgbot.Update) {
 
 	case isCommand(cmd, "/ajuda"):
 		handleAjuda(b, msg)
+
+	case isCommand(cmd, "/modelo") || isCommand(cmd, "/modelos"):
+		handleModelo(b, msg)
 
 	case isCommand(cmd, "/pergunta"):
 		handlePergunta(b, msg, args[1:])
@@ -116,6 +125,92 @@ func handleAjuda(b *gotgbot.Bot, msg *gotgbot.Message) {
 	b.SendMessage(msg.Chat.Id, resposta, opts)
 }
 
+func buildModelKeyboard(models []ai.OllamaModelInfo, currentModel string) gotgbot.InlineKeyboardMarkup {
+	var rows [][]gotgbot.InlineKeyboardButton
+	for _, m := range models {
+		label := m.Name
+		if m.Details.ParameterSize != "" {
+			label = fmt.Sprintf("%s (%s)", m.Name, m.Details.ParameterSize)
+		}
+		if m.Name == currentModel {
+			label = "✅ " + label
+		}
+		btn := gotgbot.InlineKeyboardButton{
+			Text:         label,
+			CallbackData: "set_model:" + m.Name,
+		}
+		rows = append(rows, []gotgbot.InlineKeyboardButton{btn})
+	}
+	return gotgbot.InlineKeyboardMarkup{
+		InlineKeyboard: rows,
+	}
+}
+
+func handleModelo(b *gotgbot.Bot, msg *gotgbot.Message) {
+	slog.Info("handleModelo", "user_id", msg.From.Id)
+	models, err := ai.GetInstalledModels()
+	if err != nil {
+		slog.Error("failed to get installed models", "error", err)
+		opts := &gotgbot.SendMessageOpts{
+			ReplyParameters: &gotgbot.ReplyParameters{
+				MessageId: msg.MessageId,
+			},
+		}
+		b.SendMessage(msg.Chat.Id, "❌ Não foi possível consultar os modelos do Ollama no momento.", opts)
+		return
+	}
+
+	if len(models) == 0 {
+		opts := &gotgbot.SendMessageOpts{
+			ReplyParameters: &gotgbot.ReplyParameters{
+				MessageId: msg.MessageId,
+			},
+		}
+		b.SendMessage(msg.Chat.Id, "⚠️ Nenhum modelo encontrado no servidor Ollama.", opts)
+		return
+	}
+
+	currentModel := GetUserModel(msg.From.Id)
+	markup := buildModelKeyboard(models, currentModel)
+	text := fmt.Sprintf("🤖 *Escolha o modelo de IA para suas consultas:*\n\nModelo atual: `%s`", currentModel)
+
+	opts := &gotgbot.SendMessageOpts{
+		ParseMode:   "Markdown",
+		ReplyMarkup: markup,
+		ReplyParameters: &gotgbot.ReplyParameters{
+			MessageId: msg.MessageId,
+		},
+	}
+	b.SendMessage(msg.Chat.Id, text, opts)
+}
+
+func handleCallbackQuery(b *gotgbot.Bot, cb *gotgbot.CallbackQuery) {
+	if strings.HasPrefix(cb.Data, "set_model:") {
+		modelName := strings.TrimPrefix(cb.Data, "set_model:")
+		SetUserModel(cb.From.Id, modelName)
+		slog.Info("model changed for user", "user_id", cb.From.Id, "model", modelName)
+
+		_, _ = b.AnswerCallbackQuery(cb.Id, &gotgbot.AnswerCallbackQueryOpts{
+			Text: fmt.Sprintf("Modelo alterado para %s!", modelName),
+		})
+
+		if cb.Message != nil {
+			models, err := ai.GetInstalledModels()
+			if err == nil {
+				markup := buildModelKeyboard(models, modelName)
+				text := fmt.Sprintf("🤖 *Escolha o modelo de IA para suas consultas:*\n\nModelo atual: `%s`", modelName)
+
+				_, _, _ = b.EditMessageText(text, &gotgbot.EditMessageTextOpts{
+					ChatId:      cb.Message.GetChat().Id,
+					MessageId:   cb.Message.GetMessageId(),
+					ParseMode:   "Markdown",
+					ReplyMarkup: markup,
+				})
+			}
+		}
+	}
+}
+
 const shortMessageThreshold = 300
 
 // shouldPublishToTelegraph checks if the response is long enough or contains complex formatting (like code blocks) to warrant a Telegraph Instant View page.
@@ -157,15 +252,16 @@ func handlePergunta(b *gotgbot.Bot, msg *gotgbot.Message, args []string) {
 	query := strings.Join(args, " ")
 	_, _ = b.SendChatAction(msg.Chat.Id, "typing", nil)
 
-	aiResponse, err := ai.AskOllama("", query)
+	selectedModel := GetUserModel(msg.From.Id)
+	aiResponse, err := ai.AskOllama(selectedModel, query)
 	if err != nil {
-		slog.Error("error at handling AI request", "error", err)
+		slog.Error("error at handling AI request", "error", err, "model", selectedModel)
 		opts := &gotgbot.SendMessageOpts{
 			ReplyParameters: &gotgbot.ReplyParameters{
 				MessageId: msg.MessageId,
 			},
 		}
-		b.SendMessage(msg.Chat.Id, "Desculpe, ocorreu um erro ao consultar a IA.", opts)
+		b.SendMessage(msg.Chat.Id, fmt.Sprintf("Desculpe, ocorreu um erro ao consultar o modelo `%s`.", selectedModel), opts)
 		return
 	}
 
