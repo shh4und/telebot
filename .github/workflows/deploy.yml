@@ -9,6 +9,7 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-24.04
+    environment: telebot
 
     steps:
       - name: Checkout source code
