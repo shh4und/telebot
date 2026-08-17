@@ -37,6 +37,10 @@ func SetBotCommands(b *gotgbot.Bot) error {
 			Command:     "pergunta",
 			Description: "Faz uma pergunta a IA do bot",
 		},
+		{
+			Command:     "modelo",
+			Description: "Escolhe o modelo de IA para consultas",
+		},
 	}
 
 	// 1. Aplica para o escopo Default (fallback geral)

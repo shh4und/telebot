@@ -1,6 +1,9 @@
 package bot
 
-import "testing"
+import (
+	"telegram-bot/internal/ai"
+	"testing"
+)
 
 func TestShouldPublishToTelegraph(t *testing.T) {
 	tests := []struct {
@@ -35,5 +38,40 @@ func TestShouldPublishToTelegraph(t *testing.T) {
 				t.Errorf("shouldPublishToTelegraph() = %v, want %v", result, tt.expected)
 			}
 		})
+	}
+}
+
+func TestBuildModelKeyboard(t *testing.T) {
+	models := []ai.OllamaModelInfo{
+		{
+			Name: "gemma3:latest",
+			Details: ai.ModelDetails{
+				ParameterSize: "4.3B",
+			},
+		},
+		{
+			Name: "deepseek-r1:1.5b",
+			Details: ai.ModelDetails{
+				ParameterSize: "1.8B",
+			},
+		},
+	}
+
+	keyboard := buildModelKeyboard(models, "gemma3:latest")
+	if len(keyboard.InlineKeyboard) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(keyboard.InlineKeyboard))
+	}
+
+	btn1 := keyboard.InlineKeyboard[0][0]
+	if btn1.Text != "✅ gemma3:latest (4.3B)" {
+		t.Errorf("expected selected indicator on btn1, got %s", btn1.Text)
+	}
+	if btn1.CallbackData != "set_model:gemma3:latest" {
+		t.Errorf("expected callback data set_model:gemma3:latest, got %s", btn1.CallbackData)
+	}
+
+	btn2 := keyboard.InlineKeyboard[1][0]
+	if btn2.Text != "deepseek-r1:1.5b (1.8B)" {
+		t.Errorf("expected unselected label on btn2, got %s", btn2.Text)
 	}
 }
