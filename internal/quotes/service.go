@@ -13,6 +13,8 @@ import (
 	"time"
 )
 
+const browserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
 type Service struct {
 	client   *http.Client
 	cacheTTL time.Duration
@@ -27,7 +29,7 @@ var defaultService = NewService(1 * time.Minute)
 func NewService(ttl time.Duration) *Service {
 	return &Service{
 		client: &http.Client{
-			Timeout: 8 * time.Second,
+			Timeout: 10 * time.Second,
 		},
 		cacheTTL: ttl,
 	}
@@ -51,6 +53,12 @@ type awesomeItem struct {
 	CreateDate string `json:"create_date"`
 }
 
+// OpenExchangeRates response struct (Fallback)
+type openERResponse struct {
+	Result string             `json:"result"`
+	Rates  map[string]float64 `json:"rates"`
+}
+
 // CoinGecko response struct
 type coinGeckoResponse map[string]struct {
 	USD          float64 `json:"usd"`
@@ -59,18 +67,37 @@ type coinGeckoResponse map[string]struct {
 	BRL24hChange float64 `json:"brl_24h_change"`
 }
 
-// FetchFiatQuotes busca cotações de Dólar e Euro na AwesomeAPI.
+// FetchFiatQuotes busca cotações de Dólar e Euro com fallback resiliente.
 func (s *Service) FetchFiatQuotes(ctx context.Context) (dollar CurrencyQuote, euro CurrencyQuote, err error) {
+	// 1. Tenta AwesomeAPI (endpoint primário)
+	dollar, euro, err = s.fetchAwesomeAPI(ctx)
+	if err == nil && dollar.Bid > 0 && euro.Bid > 0 {
+		return dollar, euro, nil
+	}
+
+	slog.Warn("AwesomeAPI falhou, tentando fallback Open-ER", "error", err)
+
+	// 2. Fallback para Open Exchange Rates API
+	dollar, euro, fbErr := s.fetchOpenERFallback(ctx)
+	if fbErr == nil && dollar.Bid > 0 && euro.Bid > 0 {
+		return dollar, euro, nil
+	}
+
+	return dollar, euro, fmt.Errorf("todas as fontes de câmbio falharam: awesome (%v), fallback (%v)", err, fbErr)
+}
+
+func (s *Service) fetchAwesomeAPI(ctx context.Context) (dollar CurrencyQuote, euro CurrencyQuote, err error) {
 	url := "https://economia.awesomeapi.com.br/json/last/USD-BRL,EUR-BRL"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return dollar, euro, err
 	}
-	req.Header.Set("User-Agent", "TelegramBot/1.0")
+	req.Header.Set("User-Agent", browserUserAgent)
+	req.Header.Set("Accept", "application/json")
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return dollar, euro, fmt.Errorf("falha ao consultar AwesomeAPI: %w", err)
+		return dollar, euro, fmt.Errorf("falha na conexão com AwesomeAPI: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -85,11 +112,75 @@ func (s *Service) FetchFiatQuotes(ctx context.Context) (dollar CurrencyQuote, eu
 
 	var data awesomeAPIResponse
 	if err := json.Unmarshal(body, &data); err != nil {
-		return dollar, euro, fmt.Errorf("falha no parse JSON de moedas: %w", err)
+		return dollar, euro, fmt.Errorf("falha no parse JSON AwesomeAPI: %w", err)
 	}
 
 	dollar = parseAwesomeItem(data.USDBRL)
 	euro = parseAwesomeItem(data.EURBRL)
+	return dollar, euro, nil
+}
+
+func (s *Service) fetchOpenERFallback(ctx context.Context) (dollar CurrencyQuote, euro CurrencyQuote, err error) {
+	url := "https://open.er-api.com/v6/latest/USD"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return dollar, euro, err
+	}
+	req.Header.Set("User-Agent", browserUserAgent)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return dollar, euro, fmt.Errorf("falha na conexão com Open-ER: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return dollar, euro, fmt.Errorf("Open-ER retornou status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return dollar, euro, err
+	}
+
+	var data openERResponse
+	if err := json.Unmarshal(body, &data); err != nil {
+		return dollar, euro, fmt.Errorf("falha no parse JSON Open-ER: %w", err)
+	}
+
+	usdBrl := data.Rates["BRL"]
+	usdEur := data.Rates["EUR"]
+
+	if usdBrl <= 0 || usdEur <= 0 {
+		return dollar, euro, fmt.Errorf("taxas inválidas retornadas pelo Open-ER")
+	}
+
+	eurBrl := usdBrl / usdEur
+
+	now := time.Now()
+	dollar = CurrencyQuote{
+		Code:      "USD",
+		Name:      "Dólar Americano/Real Brasileiro",
+		Bid:       usdBrl,
+		Ask:       usdBrl,
+		High:      usdBrl,
+		Low:       usdBrl,
+		PctChange: 0,
+		UpdatedAt: now,
+	}
+
+	euro = CurrencyQuote{
+		Code:      "EUR",
+		Name:      "Euro/Real Brasileiro",
+		Bid:       eurBrl,
+		Ask:       eurBrl,
+		High:      eurBrl,
+		Low:       eurBrl,
+		PctChange: 0,
+		UpdatedAt: now,
+	}
+
 	return dollar, euro, nil
 }
 
@@ -124,7 +215,8 @@ func (s *Service) FetchCryptoQuotes(ctx context.Context) ([]CryptoQuote, error) 
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "TelegramBot/1.0")
+	req.Header.Set("User-Agent", browserUserAgent)
+	req.Header.Set("Accept", "application/json")
 
 	resp, err := s.client.Do(req)
 	if err != nil {
@@ -173,7 +265,7 @@ func (s *Service) FetchCryptoQuotes(ctx context.Context) ([]CryptoQuote, error) 
 	return quotes, nil
 }
 
-// GetMarketSummary obtém o resumo do mercado com cache.
+// GetMarketSummary obtém o resumo do mercado com cache e logging adequado de erros.
 func (s *Service) GetMarketSummary(ctx context.Context, forceRefresh bool) (*MarketSummary, error) {
 	s.mu.RLock()
 	cached := s.cache
@@ -194,7 +286,9 @@ func (s *Service) GetMarketSummary(ctx context.Context, forceRefresh bool) (*Mar
 		defer wg.Done()
 		var d, e CurrencyQuote
 		d, e, dollarErr = s.FetchFiatQuotes(ctx)
-		if dollarErr == nil {
+		if dollarErr != nil {
+			slog.Error("erro ao buscar moedas fiat", "error", dollarErr)
+		} else {
 			summary.Dollar = d
 			summary.Euro = e
 		}
@@ -204,7 +298,9 @@ func (s *Service) GetMarketSummary(ctx context.Context, forceRefresh bool) (*Mar
 		defer wg.Done()
 		var cryptos []CryptoQuote
 		cryptos, cryptoErr = s.FetchCryptoQuotes(ctx)
-		if cryptoErr == nil {
+		if cryptoErr != nil {
+			slog.Error("erro ao buscar criptomoedas", "error", cryptoErr)
+		} else {
 			summary.Cryptos = cryptos
 		}
 	}()
@@ -213,7 +309,7 @@ func (s *Service) GetMarketSummary(ctx context.Context, forceRefresh bool) (*Mar
 
 	if dollarErr != nil && cryptoErr != nil {
 		if cached != nil {
-			slog.Warn("usando cache antigo de cotações devido a erro nas APIs")
+			slog.Warn("usando cache antigo de cotações devido a erro em todas as APIs")
 			return cached, nil
 		}
 		return nil, fmt.Errorf("erro ao obter cotações: moedas (%v), cripto (%v)", dollarErr, cryptoErr)

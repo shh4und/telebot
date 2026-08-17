@@ -34,27 +34,39 @@ func formatQuotesMessage(summary *quotes.MarketSummary) string {
 	// Câmbio Comercial
 	sb.WriteString("🇧🇷 *Câmbio Comercial (BRL):*\n")
 	if summary.Dollar.Bid > 0 {
-		sb.WriteString(fmt.Sprintf("• *Dólar (USD):* R$ %s (%s)\n",
+		var suffix string
+		if summary.Dollar.PctChange != 0 {
+			suffix = fmt.Sprintf(" (%s)", quotes.VariationIndicator(summary.Dollar.PctChange))
+		}
+		sb.WriteString(fmt.Sprintf("• *Dólar (USD):* R$ %s%s\n",
 			quotes.FormatBRL(summary.Dollar.Bid),
-			quotes.VariationIndicator(summary.Dollar.PctChange),
+			suffix,
 		))
-		sb.WriteString(fmt.Sprintf("  ↳ _Mín: R$ %s | Máx: R$ %s_\n",
-			quotes.FormatBRL(summary.Dollar.Low),
-			quotes.FormatBRL(summary.Dollar.High),
-		))
+		if summary.Dollar.High > 0 && summary.Dollar.Low > 0 && summary.Dollar.High != summary.Dollar.Low {
+			sb.WriteString(fmt.Sprintf("  ↳ _Mín: R$ %s | Máx: R$ %s_\n",
+				quotes.FormatBRL(summary.Dollar.Low),
+				quotes.FormatBRL(summary.Dollar.High),
+			))
+		}
 	} else {
 		sb.WriteString("• *Dólar (USD):* _Indisponível no momento_\n")
 	}
 
 	if summary.Euro.Bid > 0 {
-		sb.WriteString(fmt.Sprintf("• *Euro (EUR):* R$ %s (%s)\n",
+		var suffix string
+		if summary.Euro.PctChange != 0 {
+			suffix = fmt.Sprintf(" (%s)", quotes.VariationIndicator(summary.Euro.PctChange))
+		}
+		sb.WriteString(fmt.Sprintf("• *Euro (EUR):* R$ %s%s\n",
 			quotes.FormatBRL(summary.Euro.Bid),
-			quotes.VariationIndicator(summary.Euro.PctChange),
+			suffix,
 		))
-		sb.WriteString(fmt.Sprintf("  ↳ _Mín: R$ %s | Máx: R$ %s_\n",
-			quotes.FormatBRL(summary.Euro.Low),
-			quotes.FormatBRL(summary.Euro.High),
-		))
+		if summary.Euro.High > 0 && summary.Euro.Low > 0 && summary.Euro.High != summary.Euro.Low {
+			sb.WriteString(fmt.Sprintf("  ↳ _Mín: R$ %s | Máx: R$ %s_\n",
+				quotes.FormatBRL(summary.Euro.Low),
+				quotes.FormatBRL(summary.Euro.High),
+			))
+		}
 	} else {
 		sb.WriteString("• *Euro (EUR):* _Indisponível no momento_\n")
 	}
