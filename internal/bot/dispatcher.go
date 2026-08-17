@@ -116,6 +116,32 @@ func handleAjuda(b *gotgbot.Bot, msg *gotgbot.Message) {
 	b.SendMessage(msg.Chat.Id, resposta, opts)
 }
 
+const shortMessageThreshold = 300
+
+// shouldPublishToTelegraph checks if the response is long enough or contains complex formatting (like code blocks) to warrant a Telegraph Instant View page.
+func shouldPublishToTelegraph(text string) bool {
+	trimmed := strings.TrimSpace(text)
+	if len([]rune(trimmed)) > shortMessageThreshold || strings.Contains(trimmed, "```") {
+		return true
+	}
+	return false
+}
+
+func sendDirectResponse(b *gotgbot.Bot, chatID int64, replyToID int64, text string) {
+	opts := &gotgbot.SendMessageOpts{
+		ParseMode: "Markdown",
+		ReplyParameters: &gotgbot.ReplyParameters{
+			MessageId: replyToID,
+		},
+	}
+	_, err := b.SendMessage(chatID, text, opts)
+	if err != nil {
+		// Fallback without parse mode if Markdown rendering fails
+		opts.ParseMode = ""
+		b.SendMessage(chatID, text, opts)
+	}
+}
+
 func handlePergunta(b *gotgbot.Bot, msg *gotgbot.Message, args []string) {
 	slog.Info("pergunta", "message_id", msg.MessageId, "args", args)
 	if len(args) == 0 {
@@ -143,6 +169,13 @@ func handlePergunta(b *gotgbot.Bot, msg *gotgbot.Message, args []string) {
 		return
 	}
 
+	// Respostas curtas são enviadas diretamente no chat
+	if !shouldPublishToTelegraph(aiResponse) {
+		sendDirectResponse(b, msg.Chat.Id, msg.MessageId, aiResponse)
+		return
+	}
+
+	// Respostas longas (> 300 caracteres ou com código) são publicadas via Telegraph
 	title := query
 	if len(title) > 60 {
 		title = title[:57] + "..."
@@ -150,14 +183,8 @@ func handlePergunta(b *gotgbot.Bot, msg *gotgbot.Message, args []string) {
 
 	pageURL, err := telegraph.PublishMarkdown(title, aiResponse)
 	if err != nil {
-		slog.Error("error publishing to telegraph", "error", err)
-		// Fallback para envio de texto normal caso ocorra erro no Telegraph
-		opts := &gotgbot.SendMessageOpts{
-			ReplyParameters: &gotgbot.ReplyParameters{
-				MessageId: msg.MessageId,
-			},
-		}
-		b.SendMessage(msg.Chat.Id, aiResponse, opts)
+		slog.Error("error publishing to telegraph, falling back to direct message", "error", err)
+		sendDirectResponse(b, msg.Chat.Id, msg.MessageId, aiResponse)
 		return
 	}
 
@@ -170,3 +197,4 @@ func handlePergunta(b *gotgbot.Bot, msg *gotgbot.Message, args []string) {
 	}
 	b.SendMessage(msg.Chat.Id, respostaMsg, opts)
 }
+

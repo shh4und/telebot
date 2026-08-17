@@ -6,18 +6,15 @@ import (
 )
 
 func TestMarkdownToNodes(t *testing.T) {
-	md := `# Título Principal
-Este é um **parágrafo** com texto em *itálico* e um [link](https://telegram.org).
-
-- Item 1 da lista
-- Item 2 da lista
-
-```go
-func Hello() {
-    fmt.Println("World")
-}
-```
-`
+	md := "# Título Principal\n" +
+		"Este é um **parágrafo** com texto em *itálico* e um [link](https://telegram.org).\n\n" +
+		"- Item 1 da lista\n" +
+		"- Item 2 da lista\n\n" +
+		"```go\n" +
+		"func Hello() {\n" +
+		"    fmt.Println(\"World\")\n" +
+		"}\n" +
+		"```\n"
 
 	nodes, err := MarkdownToNodes(md)
 	if err != nil {
