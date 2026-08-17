@@ -1,18 +1,30 @@
-# Ignore all
-*
-
-# Unignore all with extensions
-!*.*
-
-# Unignore all dirs
-!*/
-
-
-.env
+# Binaries and build artifacts
+main
+telebot
+bin/
 build/
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Environment variables (preserve template)
+.env
+.env.*
+!.env.example
+
+# Temporary files and directories
+tmp/
+*tmp/
 *.log
+
+# Editor and OS files
 .DS_Store
 .vscode/
+.idea/
 *.swp
-
-*tmp/
+*.swo

@@ -1,0 +1,64 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '>=1.23'
+          cache: true
+
+      - name: Install CGO dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libwebp-dev
+
+      - name: Build Go binary
+        env:
+          CGO_ENABLED: 1
+          GOOS: linux
+          GOARCH: amd64
+        run: |
+          go build -ldflags="-s -w" -o telebot ./cmd/bot/main.go
+
+      - name: Deploy binary to VM via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "telebot"
+          target: "/tmp/"
+
+      - name: Restart Systemd Service
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            # Substituicao atomica do executavel
+            mv /tmp/telebot /opt/telebot/telebot.new
+            chmod +x /opt/telebot/telebot.new
+            mv -f /opt/telebot/telebot.new /opt/telebot/telebot
+            
+            # Reinicia o servico
+            sudo systemctl restart telebot
+            
+            # Valida se o processo subiu corretamente
+            sleep 2
+            sudo systemctl is-active --quiet telebot
+            echo "Telebot deployed e ativo com sucesso!"
