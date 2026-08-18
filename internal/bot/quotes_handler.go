@@ -134,9 +134,21 @@ func handleMoedas(b *gotgbot.Bot, msg *gotgbot.Message) {
 	}
 }
 
+var quotesRefreshCooldown = NewCooldownTracker(15 * time.Second)
+
 // handleQuotesCallback trata o clique no botão "Atualizar Cotações".
 func handleQuotesCallback(b *gotgbot.Bot, cb *gotgbot.CallbackQuery) {
-	slog.Info("quotes refresh clicked", "user_id", cb.From.Id)
+	userID := cb.From.Id
+	slog.Info("quotes refresh clicked", "user_id", userID)
+
+	if allowed, remaining := quotesRefreshCooldown.Allow(userID); !allowed {
+		secs := int(remaining.Seconds()) + 1
+		_, _ = b.AnswerCallbackQuery(cb.Id, &gotgbot.AnswerCallbackQueryOpts{
+			Text:      fmt.Sprintf("⏳ Aguarde %ds para atualizar novamente.", secs),
+			ShowAlert: false,
+		})
+		return
+	}
 
 	ctx := context.Background()
 	summary, err := quotes.GetMarketSummary(ctx, true) // forçar refresh
