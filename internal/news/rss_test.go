@@ -2,6 +2,7 @@ package news
 
 import (
 	"testing"
+	"time"
 )
 
 const sampleRSS = `<?xml version="1.0" encoding="UTF-8"?>
@@ -77,5 +78,29 @@ func TestNormalizeCategory(t *testing.T) {
 		if result != tt.expected {
 			t.Errorf("NormalizeCategory(%q) = %q; esperado %q", tt.input, result, tt.expected)
 		}
+	}
+}
+
+func TestFormatRelativeTime(t *testing.T) {
+	now := time.Now()
+
+	if got := FormatRelativeTime(now); got != "agora mesmo" {
+		t.Errorf("esperava 'agora mesmo', obteve %q", got)
+	}
+
+	if got := FormatRelativeTime(now.Add(-20 * time.Minute)); got != "há 20 min" {
+		t.Errorf("esperava 'há 20 min', obteve %q", got)
+	}
+
+	if got := FormatRelativeTime(now.Add(-2 * time.Hour)); got != "há 2h" {
+		t.Errorf("esperava 'há 2h', obteve %q", got)
+	}
+
+	if got := FormatRelativeTime(now.Add(-30 * time.Hour)); got != "ontem" {
+		t.Errorf("esperava 'ontem', obteve %q", got)
+	}
+
+	if got := FormatRelativeTime(now.Add(-72 * time.Hour)); got != "há 3 dias" {
+		t.Errorf("esperava 'há 3 dias', obteve %q", got)
 	}
 }

@@ -3,15 +3,19 @@ package bot
 import (
 	"context"
 	"fmt"
+	"html"
 	"log/slog"
+	"strconv"
 	"strings"
 	"telegram-bot/internal/news"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 )
 
-// buildNewsKeyboard constrói o teclado inline com as categorias de notícias.
-func buildNewsKeyboard(activeCat string) gotgbot.InlineKeyboardMarkup {
+const newsPageSize = 2
+
+// buildNewsKeyboard constrói o teclado inline com categorias e navegação por páginas.
+func buildNewsKeyboard(activeCat string, currentPage, totalPages int) gotgbot.InlineKeyboardMarkup {
 	buttons := []struct {
 		key   string
 		label string
@@ -42,45 +46,109 @@ func buildNewsKeyboard(activeCat string) gotgbot.InlineKeyboardMarkup {
 		}
 	}
 
+	var navRow []gotgbot.InlineKeyboardButton
+	if currentPage > 1 {
+		navRow = append(navRow, gotgbot.InlineKeyboardButton{
+			Text:         "⬅️ Anterior",
+			CallbackData: fmt.Sprintf("news_page:%s:%d", activeCat, currentPage-1),
+		})
+	}
+
+	navRow = append(navRow, gotgbot.InlineKeyboardButton{
+		Text:         "🔄 Atualizar",
+		CallbackData: fmt.Sprintf("news_refresh:%s:%d", activeCat, currentPage),
+	})
+
+	if currentPage < totalPages {
+		navRow = append(navRow, gotgbot.InlineKeyboardButton{
+			Text:         "Próxima ➡️",
+			CallbackData: fmt.Sprintf("news_page:%s:%d", activeCat, currentPage+1),
+		})
+	}
+
+	keyboard := [][]gotgbot.InlineKeyboardButton{row1, row2}
+	if len(navRow) > 0 {
+		keyboard = append(keyboard, navRow)
+	}
+
 	return gotgbot.InlineKeyboardMarkup{
-		InlineKeyboard: [][]gotgbot.InlineKeyboardButton{row1, row2},
+		InlineKeyboard: keyboard,
 	}
 }
 
-// formatNewsMessage formata as notícias com limite e links.
-func formatNewsMessage(articles []news.Article, info *news.CategoryInfo) string {
+func cleanSnippet(desc string, maxLen int) string {
+	trimmed := strings.TrimSpace(desc)
+	if trimmed == "" {
+		return ""
+	}
+	runes := []rune(trimmed)
+	if len(runes) > maxLen {
+		return string(runes[:maxLen-3]) + "..."
+	}
+	return trimmed
+}
+
+// formatNewsMessage formata as notícias com HTML, blockquotes, badges de tempo e paginação.
+func formatNewsMessage(res *news.PageResult) string {
+	if res == nil {
+		return "Nenhuma notícia encontrada no momento."
+	}
+
 	var sb strings.Builder
 
 	emoji := "📰"
 	title := "Notícias"
-	if info != nil {
-		if info.Emoji != "" {
-			emoji = info.Emoji
+	if res.Category != nil {
+		if res.Category.Emoji != "" {
+			emoji = res.Category.Emoji
 		}
-		if info.Title != "" {
-			title = info.Title
+		if res.Category.Title != "" {
+			title = res.Category.Title
 		}
 	}
 
-	sb.WriteString(fmt.Sprintf("%s *Manchetes: %s*\n\n", emoji, title))
+	sb.WriteString(fmt.Sprintf("<b>%s Manchetes: %s</b>\n", emoji, html.EscapeString(title)))
+	if !res.FetchedAt.IsZero() {
+		rel := news.FormatRelativeTime(res.FetchedAt)
+		if rel != "" {
+			sb.WriteString(fmt.Sprintf("<i>Atualizado %s</i>\n", html.EscapeString(rel)))
+		}
+	}
+	sb.WriteString("\n")
 
-	if len(articles) == 0 {
+	if len(res.Articles) == 0 {
 		sb.WriteString("Nenhuma notícia encontrada no momento. Tente novamente mais tarde.")
 		return sb.String()
 	}
 
-	for i, a := range articles {
-		// Formatação: 1. [Título da Notícia](URL) (Fonte)
-		// Escapando caracteres para Markdown simples
-		cleanTitle := strings.ReplaceAll(a.Title, "[", "(")
-		cleanTitle = strings.ReplaceAll(cleanTitle, "]", ")")
-		cleanTitle = strings.ReplaceAll(cleanTitle, "*", "")
+	for _, a := range res.Articles {
+		escapedTitle := html.EscapeString(a.Title)
+		escapedURL := html.EscapeString(a.URL)
+		escapedSource := html.EscapeString(a.Source)
 
-		sb.WriteString(fmt.Sprintf("%d. [%s](%s)\n", i+1, cleanTitle, a.URL))
-		sb.WriteString(fmt.Sprintf("   _Fonte: %s_\n\n", a.Source))
+		sb.WriteString(fmt.Sprintf("📌 <a href=\"%s\"><b>%s</b></a>\n", escapedURL, escapedTitle))
+
+		desc := cleanSnippet(a.Description, 180)
+		if desc != "" {
+			sb.WriteString(fmt.Sprintf("<blockquote>%s</blockquote>\n", html.EscapeString(desc)))
+		}
+
+		timeBadge := ""
+		if !a.PublishedAt.IsZero() {
+			relTime := news.FormatRelativeTime(a.PublishedAt)
+			if relTime != "" {
+				timeBadge = fmt.Sprintf("  •  ⏱ <i>%s</i>", html.EscapeString(relTime))
+			}
+		}
+
+		sb.WriteString(fmt.Sprintf("🏷 <i>%s</i>%s\n\n", escapedSource, timeBadge))
 	}
 
-	sb.WriteString("💡 _Selecione uma categoria abaixo para alternar:_")
+	if res.TotalPages > 1 {
+		sb.WriteString(fmt.Sprintf("<i>📄 Página %d de %d (%d notícias)</i>\n", res.CurrentPage, res.TotalPages, res.TotalItems))
+	}
+	sb.WriteString("💡 <i>Selecione uma categoria ou navegue pelas páginas:</i>")
+
 	return sb.String()
 }
 
@@ -99,7 +167,7 @@ func handleNoticias(b *gotgbot.Bot, msg *gotgbot.Message, args []string) {
 	_, _ = b.SendChatAction(msg.Chat.Id, "typing", nil)
 
 	ctx := context.Background()
-	articles, info, err := news.GetNews(ctx, categoryKey)
+	res, err := news.GetPagedNews(ctx, categoryKey, 1, newsPageSize, false)
 	if err != nil {
 		slog.Error("erro ao buscar notícias", "categoria", categoryKey, "error", err)
 		opts := &gotgbot.SendMessageOpts{
@@ -111,11 +179,11 @@ func handleNoticias(b *gotgbot.Bot, msg *gotgbot.Message, args []string) {
 		return
 	}
 
-	text := formatNewsMessage(articles, info)
-	markup := buildNewsKeyboard(categoryKey)
+	text := formatNewsMessage(res)
+	markup := buildNewsKeyboard(categoryKey, res.CurrentPage, res.TotalPages)
 
 	opts := &gotgbot.SendMessageOpts{
-		ParseMode:   "Markdown",
+		ParseMode:   "HTML",
 		ReplyMarkup: markup,
 		ReplyParameters: &gotgbot.ReplyParameters{
 			MessageId: msg.MessageId,
@@ -131,13 +199,42 @@ func handleNoticias(b *gotgbot.Bot, msg *gotgbot.Message, args []string) {
 	}
 }
 
-// handleNewsCallback trata a troca de categoria via botões inline.
+func parseNewsCallbackData(data string) (action, category string, page int) {
+	page = 1
+	category = "br"
+	parts := strings.Split(data, ":")
+	if len(parts) >= 2 {
+		action = parts[0]
+		category = parts[1]
+	}
+	if len(parts) >= 3 {
+		if p, err := strconv.Atoi(parts[2]); err == nil && p > 0 {
+			page = p
+		}
+	}
+	return action, category, page
+}
+
+// handleNewsCallback trata navegação, troca de categoria e atualização via botões inline.
 func handleNewsCallback(b *gotgbot.Bot, cb *gotgbot.CallbackQuery) {
-	categoryKey := strings.TrimPrefix(cb.Data, "news_cat:")
-	slog.Info("news category changed", "user_id", cb.From.Id, "categoria", categoryKey)
+	action, categoryKey, page := parseNewsCallbackData(cb.Data)
+	forceRefresh := action == "news_refresh"
+
+	normalized := news.NormalizeCategory(categoryKey)
+	if normalized != "" {
+		categoryKey = normalized
+	}
+
+	slog.Info("news callback query", "user_id", cb.From.Id, "action", action, "categoria", categoryKey, "page", page, "refresh", forceRefresh)
+
+	if forceRefresh {
+		_, _ = b.AnswerCallbackQuery(cb.Id, &gotgbot.AnswerCallbackQueryOpts{
+			Text: "Atualizando feed de notícias...",
+		})
+	}
 
 	ctx := context.Background()
-	articles, info, err := news.GetNews(ctx, categoryKey)
+	res, err := news.GetPagedNews(ctx, categoryKey, page, newsPageSize, forceRefresh)
 	if err != nil {
 		slog.Error("erro ao buscar notícias no callback", "categoria", categoryKey, "error", err)
 		_, _ = b.AnswerCallbackQuery(cb.Id, &gotgbot.AnswerCallbackQueryOpts{
@@ -147,18 +244,24 @@ func handleNewsCallback(b *gotgbot.Bot, cb *gotgbot.CallbackQuery) {
 		return
 	}
 
-	_, _ = b.AnswerCallbackQuery(cb.Id, &gotgbot.AnswerCallbackQueryOpts{
-		Text: fmt.Sprintf("Carregando notícias de %s...", info.Title),
-	})
+	if !forceRefresh {
+		title := categoryKey
+		if res.Category != nil {
+			title = res.Category.Title
+		}
+		_, _ = b.AnswerCallbackQuery(cb.Id, &gotgbot.AnswerCallbackQueryOpts{
+			Text: fmt.Sprintf("Notícias de %s (Pág. %d/%d)", title, res.CurrentPage, res.TotalPages),
+		})
+	}
 
 	if cb.Message != nil {
-		text := formatNewsMessage(articles, info)
-		markup := buildNewsKeyboard(categoryKey)
+		text := formatNewsMessage(res)
+		markup := buildNewsKeyboard(categoryKey, res.CurrentPage, res.TotalPages)
 
 		_, _, err = b.EditMessageText(text, &gotgbot.EditMessageTextOpts{
 			ChatId:      cb.Message.GetChat().Id,
 			MessageId:   cb.Message.GetMessageId(),
-			ParseMode:   "Markdown",
+			ParseMode:   "HTML",
 			ReplyMarkup: markup,
 			LinkPreviewOptions: &gotgbot.LinkPreviewOptions{
 				IsDisabled: true,
@@ -169,3 +272,4 @@ func handleNewsCallback(b *gotgbot.Bot, cb *gotgbot.CallbackQuery) {
 		}
 	}
 }
+
