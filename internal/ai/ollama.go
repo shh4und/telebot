@@ -91,14 +91,14 @@ func AskOllama(model string, prompt string) (string, error) {
 		return "", fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
-	slog.Info("sending request to ollama", "model", model, "payload_len", len(jsonData))
+	slog.Debug("enviando requisicao ao ollama", "model", model, "payload_len", len(jsonData))
 	resp, err := httpClient.Post(url, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
 
-	slog.Info("ollama response received", "status", resp.Status)
+	slog.Debug("resposta recebida do ollama", "model", model, "status_code", resp.StatusCode)
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("ollama generate failed with status: %s", resp.Status)
 	}

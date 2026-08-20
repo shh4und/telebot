@@ -6,6 +6,7 @@ import (
 	"strings"
 	"telegram-bot/internal/ai"
 	"telegram-bot/internal/telegraph"
+	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 )
@@ -116,7 +117,7 @@ func handlePing(b *gotgbot.Bot, msg *gotgbot.Message) {
 			MessageId: msg.MessageId,
 		},
 	}
-	slog.Info("ping", "message_id", msg.MessageId)
+	slog.Info("comando ping recebido", "user_id", msg.From.Id, "chat_id", msg.Chat.Id, "message_id", msg.MessageId)
 	b.SendMessage(msg.Chat.Id, resposta, opts)
 }
 
@@ -127,7 +128,7 @@ func handleAjuda(b *gotgbot.Bot, msg *gotgbot.Message) {
 			MessageId: msg.MessageId,
 		},
 	}
-	slog.Info("ajuda", "message_id", msg.MessageId)
+	slog.Info("comando ajuda recebido", "user_id", msg.From.Id, "chat_id", msg.Chat.Id, "message_id", msg.MessageId)
 	b.SendMessage(msg.Chat.Id, resposta, opts)
 }
 
@@ -153,10 +154,10 @@ func buildModelKeyboard(models []ai.OllamaModelInfo, currentModel string) gotgbo
 }
 
 func handleModelo(b *gotgbot.Bot, msg *gotgbot.Message) {
-	slog.Info("handleModelo", "user_id", msg.From.Id)
+	slog.Info("comando modelo recebido", "user_id", msg.From.Id, "chat_id", msg.Chat.Id)
 	models, err := ai.GetInstalledModels()
 	if err != nil {
-		slog.Error("failed to get installed models", "error", err)
+		slog.Error("falha ao consultar modelos instalados", "error", err, "user_id", msg.From.Id)
 		opts := &gotgbot.SendMessageOpts{
 			ReplyParameters: &gotgbot.ReplyParameters{
 				MessageId: msg.MessageId,
@@ -194,7 +195,7 @@ func handleCallbackQuery(b *gotgbot.Bot, cb *gotgbot.CallbackQuery) {
 	if strings.HasPrefix(cb.Data, "set_model:") {
 		modelName := strings.TrimPrefix(cb.Data, "set_model:")
 		SetUserModel(cb.From.Id, modelName)
-		slog.Info("model changed for user", "user_id", cb.From.Id, "model", modelName)
+		slog.Info("modelo do usuário atualizado", "user_id", cb.From.Id, "model", modelName)
 
 		_, _ = b.AnswerCallbackQuery(cb.Id, &gotgbot.AnswerCallbackQueryOpts{
 			Text: fmt.Sprintf("Modelo alterado para %s!", modelName),
@@ -255,7 +256,6 @@ func sendDirectResponse(b *gotgbot.Bot, chatID int64, replyToID int64, text stri
 }
 
 func handlePergunta(b *gotgbot.Bot, msg *gotgbot.Message, args []string) {
-	slog.Info("pergunta", "message_id", msg.MessageId, "args", args)
 	if len(args) == 0 {
 		opts := &gotgbot.SendMessageOpts{
 			ReplyParameters: &gotgbot.ReplyParameters{
@@ -267,12 +267,17 @@ func handlePergunta(b *gotgbot.Bot, msg *gotgbot.Message, args []string) {
 	}
 
 	query := strings.Join(args, " ")
+	selectedModel := GetUserModel(msg.From.Id)
+	slog.Info("comando pergunta recebido", "user_id", msg.From.Id, "chat_id", msg.Chat.Id, "message_id", msg.MessageId, "model", selectedModel, "prompt_len", len(query))
+
 	_, _ = b.SendChatAction(msg.Chat.Id, "typing", nil)
 
-	selectedModel := GetUserModel(msg.From.Id)
+	start := time.Now()
 	aiResponse, err := ai.AskOllama(selectedModel, query)
+	durationMs := time.Since(start).Milliseconds()
+
 	if err != nil {
-		slog.Error("error at handling AI request", "error", err, "model", selectedModel)
+		slog.Error("falha ao processar consulta no ollama", "error", err, "model", selectedModel, "user_id", msg.From.Id, "duration_ms", durationMs)
 		opts := &gotgbot.SendMessageOpts{
 			ReplyParameters: &gotgbot.ReplyParameters{
 				MessageId: msg.MessageId,
@@ -284,6 +289,7 @@ func handlePergunta(b *gotgbot.Bot, msg *gotgbot.Message, args []string) {
 
 	// Respostas curtas são enviadas diretamente no chat
 	if !shouldPublishToTelegraph(aiResponse) {
+		slog.Info("resposta de IA enviada diretamente no chat", "user_id", msg.From.Id, "model", selectedModel, "duration_ms", durationMs)
 		sendDirectResponse(b, msg.Chat.Id, msg.MessageId, aiResponse)
 		return
 	}
@@ -296,11 +302,12 @@ func handlePergunta(b *gotgbot.Bot, msg *gotgbot.Message, args []string) {
 
 	pageURL, err := telegraph.PublishMarkdown(title, aiResponse)
 	if err != nil {
-		slog.Error("error publishing to telegraph, falling back to direct message", "error", err)
+		slog.Warn("falha ao publicar no telegraph, enviando mensagem direta como fallback", "error", err, "user_id", msg.From.Id, "duration_ms", durationMs)
 		sendDirectResponse(b, msg.Chat.Id, msg.MessageId, aiResponse)
 		return
 	}
 
+	slog.Info("resposta de IA publicada no telegraph", "user_id", msg.From.Id, "model", selectedModel, "page_url", pageURL, "duration_ms", durationMs)
 	respostaMsg := fmt.Sprintf("📄 *Resposta da IA (Instant View):*\n%s", pageURL)
 	opts := &gotgbot.SendMessageOpts{
 		ParseMode: "Markdown",

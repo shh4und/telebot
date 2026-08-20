@@ -100,14 +100,14 @@ func formatQuotesMessage(summary *quotes.MarketSummary) string {
 
 // handleMoedas trata os comandos /moedas e /cotacao.
 func handleMoedas(b *gotgbot.Bot, msg *gotgbot.Message) {
-	slog.Info("handleMoedas", "user_id", msg.From.Id)
+	slog.Info("comando moedas recebido", "user_id", msg.From.Id, "chat_id", msg.Chat.Id)
 
 	_, _ = b.SendChatAction(msg.Chat.Id, "typing", nil)
 
 	ctx := context.Background()
 	summary, err := quotes.GetMarketSummary(ctx, false)
 	if err != nil {
-		slog.Error("erro ao buscar cotações", "error", err)
+		slog.Error("falha ao buscar cotacoes", "error", err, "user_id", msg.From.Id)
 		opts := &gotgbot.SendMessageOpts{
 			ReplyParameters: &gotgbot.ReplyParameters{
 				MessageId: msg.MessageId,
@@ -130,7 +130,7 @@ func handleMoedas(b *gotgbot.Bot, msg *gotgbot.Message) {
 
 	_, err = b.SendMessage(msg.Chat.Id, text, opts)
 	if err != nil {
-		slog.Error("falha ao enviar mensagem de cotações", "error", err)
+		slog.Error("falha ao enviar mensagem de cotacoes", "error", err, "chat_id", msg.Chat.Id)
 	}
 }
 
@@ -139,7 +139,7 @@ var quotesRefreshCooldown = NewCooldownTracker(15 * time.Second)
 // handleQuotesCallback trata o clique no botão "Atualizar Cotações".
 func handleQuotesCallback(b *gotgbot.Bot, cb *gotgbot.CallbackQuery) {
 	userID := cb.From.Id
-	slog.Info("quotes refresh clicked", "user_id", userID)
+	slog.Info("callback de atualizacao de cotacoes acionado", "user_id", userID)
 
 	if allowed, remaining := quotesRefreshCooldown.Allow(userID); !allowed {
 		secs := int(remaining.Seconds()) + 1
@@ -153,7 +153,7 @@ func handleQuotesCallback(b *gotgbot.Bot, cb *gotgbot.CallbackQuery) {
 	ctx := context.Background()
 	summary, err := quotes.GetMarketSummary(ctx, true) // forçar refresh
 	if err != nil {
-		slog.Error("erro ao atualizar cotações no callback", "error", err)
+		slog.Error("falha ao atualizar cotacoes no callback", "error", err, "user_id", userID)
 		_, _ = b.AnswerCallbackQuery(cb.Id, &gotgbot.AnswerCallbackQueryOpts{
 			Text:      "Erro ao atualizar cotações. Tente novamente.",
 			ShowAlert: false,
@@ -176,7 +176,7 @@ func handleQuotesCallback(b *gotgbot.Bot, cb *gotgbot.CallbackQuery) {
 			ReplyMarkup: markup,
 		})
 		if err != nil {
-			slog.Debug("falha ao editar mensagem de cotações", "error", err)
+			slog.Debug("falha ao editar mensagem de cotacoes (conteudo identico)", "error", err)
 		}
 	}
 }

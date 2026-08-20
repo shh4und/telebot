@@ -154,7 +154,7 @@ func formatNewsMessage(res *news.PageResult) string {
 
 // handleNoticias trata o comando /noticias.
 func handleNoticias(b *gotgbot.Bot, msg *gotgbot.Message, args []string) {
-	slog.Info("handleNoticias", "user_id", msg.From.Id, "args", args)
+	slog.Info("comando noticias recebido", "user_id", msg.From.Id, "chat_id", msg.Chat.Id, "args", args)
 
 	categoryKey := "br"
 	if len(args) > 0 {
@@ -169,7 +169,7 @@ func handleNoticias(b *gotgbot.Bot, msg *gotgbot.Message, args []string) {
 	ctx := context.Background()
 	res, err := news.GetPagedNews(ctx, categoryKey, 1, newsPageSize, false)
 	if err != nil {
-		slog.Error("erro ao buscar notícias", "categoria", categoryKey, "error", err)
+		slog.Error("falha ao obter noticias", "error", err, "categoria", categoryKey, "user_id", msg.From.Id)
 		opts := &gotgbot.SendMessageOpts{
 			ReplyParameters: &gotgbot.ReplyParameters{
 				MessageId: msg.MessageId,
@@ -195,7 +195,7 @@ func handleNoticias(b *gotgbot.Bot, msg *gotgbot.Message, args []string) {
 
 	_, err = b.SendMessage(msg.Chat.Id, text, opts)
 	if err != nil {
-		slog.Error("falha ao enviar mensagem de notícias", "error", err)
+		slog.Error("falha ao enviar mensagem de noticias", "error", err, "chat_id", msg.Chat.Id)
 	}
 }
 
@@ -225,7 +225,7 @@ func handleNewsCallback(b *gotgbot.Bot, cb *gotgbot.CallbackQuery) {
 		categoryKey = normalized
 	}
 
-	slog.Info("news callback query", "user_id", cb.From.Id, "action", action, "categoria", categoryKey, "page", page, "refresh", forceRefresh)
+	slog.Info("callback de noticias acionado", "user_id", cb.From.Id, "action", action, "categoria", categoryKey, "page", page, "refresh", forceRefresh)
 
 	if forceRefresh {
 		_, _ = b.AnswerCallbackQuery(cb.Id, &gotgbot.AnswerCallbackQueryOpts{
@@ -236,7 +236,7 @@ func handleNewsCallback(b *gotgbot.Bot, cb *gotgbot.CallbackQuery) {
 	ctx := context.Background()
 	res, err := news.GetPagedNews(ctx, categoryKey, page, newsPageSize, forceRefresh)
 	if err != nil {
-		slog.Error("erro ao buscar notícias no callback", "categoria", categoryKey, "error", err)
+		slog.Error("falha ao obter noticias no callback", "error", err, "categoria", categoryKey, "user_id", cb.From.Id)
 		_, _ = b.AnswerCallbackQuery(cb.Id, &gotgbot.AnswerCallbackQueryOpts{
 			Text:      "Erro ao carregar notícias. Tente novamente.",
 			ShowAlert: false,
@@ -268,7 +268,7 @@ func handleNewsCallback(b *gotgbot.Bot, cb *gotgbot.CallbackQuery) {
 			},
 		})
 		if err != nil {
-			slog.Debug("falha ao editar mensagem de notícias", "error", err)
+			slog.Debug("falha ao editar mensagem de noticias", "error", err)
 		}
 	}
 }

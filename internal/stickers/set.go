@@ -29,11 +29,11 @@ func newInputSticker(b *gotgbot.Bot, webpData []byte, mimeType string) (gotgbot.
 	// Primeiro faz upload do arquivo para obter um file_id
 	uploadedFile, err := b.UploadStickerFile(OwnerUserID, gotgbot.InputFileByReader("sticker."+ext, bytes.NewReader(webpData)), format, nil)
 	if err != nil || uploadedFile == nil {
-		slog.Warn("upload failed", "error", err, "webpData size", len(webpData))
+		slog.Warn("falha no upload do sticker para o telegram", "error", err, "bytes_len", len(webpData))
 		return gotgbot.InputSticker{}, nil
 	}
 
-	slog.Info("upload realizado", "fileId", uploadedFile.FileId)
+	slog.Info("upload de sticker realizado no telegram", "file_id", uploadedFile.FileId, "format", format)
 
 	inputSticker := gotgbot.InputSticker{
 		Sticker:   uploadedFile.FileId,
@@ -55,15 +55,14 @@ func AddToCentralPack(b *gotgbot.Bot, webpData []byte, mimeType string) (string,
 		return "", nil
 	}
 
-	slog.Info("upload realizado", "fileId", uploadedFile.FileId)
-
 	// 1. Tenta adicionar ao pacote central existente (usando OwnerUserID)
 	_, err := b.AddStickerToSet(OwnerUserID, setName, inputSticker, nil)
 	if err == nil {
-		slog.Info("adicionado ao pacote central existente", "setName", setName, "fileId", uploadedFile.FileId)
+		slog.Info("sticker adicionado ao pacote central existente", "set_name", setName, "file_id", uploadedFile.FileId)
 		return setName, nil
 	}
-	slog.Warn("pacote central não encontrado, criando novo", "setName", setName, "fileId", uploadedFile.FileId)
+
+	slog.Warn("pacote central não encontrado, criando novo pacote", "set_name", setName, "file_id", uploadedFile.FileId)
 	// 2. Se o pacote central não existir ainda, cria utilizando seu OwnerUserID
 	_, createErr := b.CreateNewStickerSet(OwnerUserID, setName, setTitle, []gotgbot.InputSticker{inputSticker}, &gotgbot.CreateNewStickerSetOpts{
 		StickerType: "regular",
@@ -71,7 +70,7 @@ func AddToCentralPack(b *gotgbot.Bot, webpData []byte, mimeType string) (string,
 	if createErr != nil {
 		return "", fmt.Errorf("erro ao criar pacote central: %w", createErr)
 	}
-	slog.Info("pacote central criado", "setName", setName, "fileId", uploadedFile.FileId)
+	slog.Info("novo pacote central de stickers criado", "set_name", setName, "file_id", uploadedFile.FileId)
 
 	return setName, nil
 }

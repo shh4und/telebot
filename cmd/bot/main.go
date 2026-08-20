@@ -1,21 +1,24 @@
 package main
 
 import (
-	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"telegram-bot/internal/bot"
 	"telegram-bot/internal/config"
+	"telegram-bot/internal/logger"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 )
 
 func main() {
+	// Inicializa o logger estruturado
+	logger.Init(config.Envs.LogLevel, config.Envs.LogFormat)
 
 	// Get token from the environment variable
 	token := config.Envs.BotToken
 	if token == "" {
+		slog.Error("variável de ambiente BOT_TK não informada ou vazia")
 		panic("TOKEN environment variable is empty")
 	}
 
@@ -30,14 +33,17 @@ func main() {
 		},
 	})
 	if err != nil {
+		slog.Error("falha ao instanciar bot", "error", err)
 		panic("failed to create new bot: " + err.Error())
 	}
 
 	if err := bot.SetBotCommands(b); err != nil {
+		slog.Error("falha ao registrar comandos do bot", "error", err)
 		panic("failed to set bot commands: " + err.Error())
 	}
 
-	fmt.Printf("Bot online: @%s\n", b.User.Username)
+	slog.Info("bot iniciado com sucesso", "username", b.User.Username, "log_level", config.Envs.LogLevel, "log_format", config.Envs.LogFormat)
+
 	// Create updater and dispatcher.
 	var offset int64
 	for {
@@ -47,7 +53,7 @@ func main() {
 			Timeout: 30,
 		})
 		if err != nil {
-			log.Printf("Error at GetUpdates: %v", err)
+			slog.Error("erro ao buscar updates (long polling)", "error", err)
 			time.Sleep(1 * time.Second)
 			continue
 		}

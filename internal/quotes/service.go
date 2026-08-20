@@ -75,7 +75,7 @@ func (s *Service) FetchFiatQuotes(ctx context.Context) (dollar CurrencyQuote, eu
 		return dollar, euro, nil
 	}
 
-	slog.Warn("AwesomeAPI falhou, tentando fallback Open-ER", "error", err)
+	slog.Warn("falha na awesomeapi, tentando fallback open exchange rates", "error", err)
 
 	// 2. Fallback para Open Exchange Rates API
 	dollar, euro, fbErr := s.fetchOpenERFallback(ctx)
@@ -287,7 +287,7 @@ func (s *Service) GetMarketSummary(ctx context.Context, forceRefresh bool) (*Mar
 		var d, e CurrencyQuote
 		d, e, dollarErr = s.FetchFiatQuotes(ctx)
 		if dollarErr != nil {
-			slog.Error("erro ao buscar moedas fiat", "error", dollarErr)
+			slog.Error("falha ao obter cotacoes fiat", "error", dollarErr)
 		} else {
 			summary.Dollar = d
 			summary.Euro = e
@@ -299,7 +299,7 @@ func (s *Service) GetMarketSummary(ctx context.Context, forceRefresh bool) (*Mar
 		var cryptos []CryptoQuote
 		cryptos, cryptoErr = s.FetchCryptoQuotes(ctx)
 		if cryptoErr != nil {
-			slog.Error("erro ao buscar criptomoedas", "error", cryptoErr)
+			slog.Error("falha ao obter criptomoedas", "error", cryptoErr)
 		} else {
 			summary.Cryptos = cryptos
 		}
@@ -309,7 +309,7 @@ func (s *Service) GetMarketSummary(ctx context.Context, forceRefresh bool) (*Mar
 
 	if dollarErr != nil && cryptoErr != nil {
 		if cached != nil {
-			slog.Warn("usando cache antigo de cotações devido a erro em todas as APIs")
+			slog.Warn("usando cache antigo de cotacoes devido a falha em todas as APIs")
 			return cached, nil
 		}
 		return nil, fmt.Errorf("erro ao obter cotações: moedas (%v), cripto (%v)", dollarErr, cryptoErr)
