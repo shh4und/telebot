@@ -9,9 +9,9 @@ import (
 )
 
 func TestBuildNewsKeyboard(t *testing.T) {
-	markup := buildNewsKeyboard("br")
-	if len(markup.InlineKeyboard) != 2 {
-		t.Fatalf("esperava 2 linhas de botões, obteve %d", len(markup.InlineKeyboard))
+	markup := buildNewsKeyboard("br", 1, 3)
+	if len(markup.InlineKeyboard) != 3 {
+		t.Fatalf("esperava 3 linhas de botões (2 categorias + 1 navegação), obteve %d", len(markup.InlineKeyboard))
 	}
 
 	btnBR := markup.InlineKeyboard[0][0]
@@ -23,30 +23,59 @@ func TestBuildNewsKeyboard(t *testing.T) {
 	if strings.HasPrefix(btnMundo.Text, "✅") {
 		t.Errorf("não esperava indicador selecionado no botão Mundo, obteve %s", btnMundo.Text)
 	}
+
+	navRow := markup.InlineKeyboard[2]
+	// Na página 1 de 3, deve ter "🔄 Atualizar" e "Próxima ➡️"
+	if len(navRow) != 2 {
+		t.Fatalf("esperava 2 botões na linha de navegação, obteve %d", len(navRow))
+	}
+	if navRow[0].Text != "🔄 Atualizar" {
+		t.Errorf("esperava botão Atualizar, obteve %s", navRow[0].Text)
+	}
+	if navRow[1].Text != "Próxima ➡️" {
+		t.Errorf("esperava botão Próxima, obteve %s", navRow[1].Text)
+	}
 }
 
 func TestFormatNewsMessage(t *testing.T) {
-	articles := []news.Article{
-		{
-			Title:  "Nova tecnologia é lançada",
-			URL:    "https://example.com/tech",
-			Source: "Canaltech",
+	pageResult := &news.PageResult{
+		Articles: []news.Article{
+			{
+				Title:       "Nova tecnologia é lançada",
+				Description: "Detalhes sobre a novidade no setor tecnológico",
+				URL:         "https://example.com/tech",
+				Source:      "Canaltech",
+				PublishedAt: time.Now().Add(-15 * time.Minute),
+			},
 		},
-	}
-	info := &news.CategoryInfo{
-		Title: "Tecnologia",
-		Emoji: "💻",
+		Category: &news.CategoryInfo{
+			Title: "Tecnologia",
+			Emoji: "💻",
+		},
+		CurrentPage: 1,
+		TotalPages:  3,
+		TotalItems:  6,
+		FetchedAt:   time.Now().Add(-2 * time.Minute),
 	}
 
-	msg := formatNewsMessage(articles, info)
-	if !strings.Contains(msg, "💻 *Manchetes: Tecnologia*") {
+	msg := formatNewsMessage(pageResult)
+	if !strings.Contains(msg, "<b>💻 Manchetes: Tecnologia</b>") {
 		t.Errorf("título não encontrado na mensagem: %s", msg)
 	}
-	if !strings.Contains(msg, "[Nova tecnologia é lançada](https://example.com/tech)") {
+	if !strings.Contains(msg, `<a href="https://example.com/tech"><b>Nova tecnologia é lançada</b></a>`) {
 		t.Errorf("link do artigo não formatado corretamente: %s", msg)
 	}
-	if !strings.Contains(msg, "Fonte: Canaltech") {
+	if !strings.Contains(msg, "<blockquote>Detalhes sobre a novidade no setor tecnológico</blockquote>") {
+		t.Errorf("descrição em blockquote não encontrada: %s", msg)
+	}
+	if !strings.Contains(msg, "Canaltech") {
 		t.Errorf("fonte não encontrada na mensagem: %s", msg)
+	}
+	if !strings.Contains(msg, "há 15 min") {
+		t.Errorf("tempo relativo não encontrado na mensagem: %s", msg)
+	}
+	if !strings.Contains(msg, "Página 1 de 3") {
+		t.Errorf("indicador de página não encontrado: %s", msg)
 	}
 }
 
