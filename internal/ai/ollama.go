@@ -12,11 +12,11 @@ import (
 )
 
 var (
-	modelsCache      []OllamaModelInfo
-	modelsCacheMu    sync.RWMutex
-	lastCacheFetch   time.Time
-	cacheTTL         = 1 * time.Minute
-	httpClient       = &http.Client{Timeout: 60 * time.Second}
+	modelsCache    []OllamaModelInfo
+	modelsCacheMu  sync.RWMutex
+	lastCacheFetch time.Time
+	cacheTTL       = 1 * time.Minute
+	httpClient     = &http.Client{Timeout: 60 * time.Second}
 )
 
 // GetInstalledModels consulta o endpoint /api/tags do Ollama para obter a lista de modelos instalados.
@@ -80,8 +80,8 @@ func AskOllama(model string, prompt string) (string, error) {
 		Stream: false,
 		Message: []map[string]string{
 			{
-				"role":    "user",
-				"content": "responda em pt-br",
+				"role":    "system",
+				"content": "Você é um assistente que responde exclusivamente em português do Brasil (pt-BR).",
 			},
 		},
 	}

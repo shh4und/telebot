@@ -217,7 +217,7 @@ func handleCallbackQuery(b *gotgbot.Bot, cb *gotgbot.CallbackQuery) {
 		return
 	}
 
-	if strings.HasPrefix(cb.Data, "news_cat:") {
+	if strings.HasPrefix(cb.Data, "news_") {
 		handleNewsCallback(b, cb)
 		return
 	}
