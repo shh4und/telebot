@@ -2,6 +2,7 @@ package bot
 
 import (
 	"fmt"
+	"log/slog"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 )
@@ -75,7 +76,7 @@ func SetBotCommands(b *gotgbot.Bot) error {
 		return fmt.Errorf("erro no escopo grupos: %w", err)
 	}
 
-	fmt.Println("Comandos atualizados em todos os escopos com sucesso!")
+	slog.Info("comandos do bot atualizados com sucesso em todos os escopos")
 	return nil
 }
 
@@ -97,6 +98,6 @@ func ClearBotCommands(b *gotgbot.Bot) error {
 		}
 	}
 
-	fmt.Println("Comandos removidos de todos os escopos!")
+	slog.Info("comandos do bot removidos com sucesso de todos os escopos")
 	return nil
 }
